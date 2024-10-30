@@ -2,69 +2,51 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
-)
-
-type ControlMsg int
-
-const (
-	DoExit = iota
-	ExitOk
 )
 
 type Job struct {
 	data int
 }
 
-type Result struct {
-	result int
-	job    Job
+func runJob(ch chan<- int, j Job) {
+	ch <- square(j)
 }
 
-func doubler(jobs <-chan Job, results chan<- Result, control chan ControlMsg) {
-	for {
+func square(j Job) int {
+	return j.data * j.data
+}
 
-		select {
-
-		case msg := <-control:
-			switch msg {
-			case DoExit:
-				fmt.Println("Exit goroutine")
-				control <- ExitOk
-				return
-			default:
-				panic("Unhandled control message")
-			}
-
-		case job := <-jobs:
-			results <- Result{result: job.data * 2, job: job}
-		}
-
+func makeJobs() []Job {
+	res := []Job{}
+	for i := 0; i < 30; i++ {
+		res = append(res, Job{i})
 	}
+	return res
 }
 
 func main() {
-	jobs := make(chan Job, 50)
-	results := make(chan Result, 50)
-	control := make(chan ControlMsg)
+	rand.New(rand.NewSource(time.Now().UnixNano()))
+	jobs := makeJobs()
+	results := make(chan int)
 
-	go doubler(jobs, results, control)
-
-	for i := 0; i < 30; i++ {
-		jobs <- Job{i}
+	for _, job := range jobs {
+		go runJob(results, job)
 	}
 
+	resultCount := 0
+	resultsValue := []int{}
 	for {
-		select {
-		case result := <-results:
-			fmt.Println(result)
-
-		case <-time.After(500 * time.Millisecond):
-			fmt.Println("Timed out")
-			control <- DoExit
-			<-control
-			fmt.Println("Program exit")
-			return
+		result := <-results
+		resultsValue = append(resultsValue, result)
+		resultCount++
+		if resultCount == len(jobs) {
+			break
 		}
+	}
+
+	for _, res := range resultsValue {
+		fmt.Println("Job complete:", res)
 	}
 }
